@@ -4,6 +4,16 @@ type ClaimEvent =
   | 'claim_initiated'
   | 'claim_success'
   | 'claim_error'
+  | 'Send Form Completed'
+  | 'Payment Confirmation Viewed'
+  | 'Payment Confirmed'
+  | 'Payment Created'
+  | 'Claim Link Copied'
+  | 'Claim Link Shared'
+  | 'Claim Page Opened'
+  | 'Payment Details Viewed'
+  | 'Page Viewed'
+  | 'Send Form Viewed'
   | 'Claim Verified'
   | 'Claim CTA Clicked';
 
@@ -37,9 +47,10 @@ export function detectDeviceType(userAgent?: string): DeviceType {
 
 /**
  * Base payload fields (`docs/analytics-spec.md` §3.1) shared by every
- * event: `app_version`, `user_agent`, `device_type`, and `referrer`.
- * Each field degrades gracefully when the browser API it depends on is
- * unavailable (SSR, unit tests without a DOM).
+ * event: `app_version`, `user_agent`, `device_type`, `referrer`, and the
+ * fixed frontend `platform` value "web". Each field degrades gracefully
+ * when the browser API it depends on is unavailable (SSR, unit tests
+ * without a DOM).
  */
 export function buildBasePayload(): EventProps {
   return {
@@ -47,6 +58,7 @@ export function buildBasePayload(): EventProps {
     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
     device_type: detectDeviceType(),
     referrer: typeof document !== 'undefined' && document.referrer ? document.referrer : null,
+    platform: 'web',
   };
 }
 
@@ -68,6 +80,14 @@ function track(event: ClaimEvent, props?: EventProps): void {
     console.debug('[analytics]', event, payload);
   }
 }
+
+export type ShareMethod = 'sms' | 'email' | 'whatsapp' | 'qr_code';
+
+export type EntrySource = 'direct' | 'referral' | 'shared_link' | 'unknown';
+
+export type ClaimEntryChannel = 'sms' | 'email' | 'whatsapp' | 'direct' | 'unknown';
+
+export type PaymentClaimStatus = 'unclaimed' | 'claimed' | 'expired';
 
 interface ClaimVerifiedProps {
   claimId: string;
@@ -92,6 +112,118 @@ export const analytics = {
   claimInitiated: () => track('claim_initiated'),
   claimSuccess: () => track('claim_success'),
   claimError: (reason: string) => track('claim_error', { reason }),
+  sendFormCompleted: ({
+    assetType,
+    expiryDays,
+    hasRecipientName,
+    hasMessage,
+  }: {
+    assetType?: string;
+    expiryDays?: number | null;
+    hasRecipientName: boolean;
+    hasMessage: boolean;
+  }) =>
+    track('Send Form Completed', {
+      journey: 'sender',
+      ...(assetType ? { asset_type: assetType } : {}),
+      ...(expiryDays != null ? { expiry_days: expiryDays } : {}),
+      has_recipient_name: hasRecipientName,
+      has_message: hasMessage,
+    }),
+  paymentConfirmationViewed: ({
+    assetType,
+    expiryDays,
+  }: {
+    assetType?: string;
+    expiryDays?: number | null;
+  }) =>
+    track('Payment Confirmation Viewed', {
+      journey: 'sender',
+      ...(assetType ? { asset_type: assetType } : {}),
+      ...(expiryDays != null ? { expiry_days: expiryDays } : {}),
+    }),
+  paymentConfirmed: ({
+    assetType,
+    expiryDays,
+    walletType,
+  }: {
+    assetType?: string;
+    expiryDays?: number | null;
+    walletType?: string;
+  }) =>
+    track('Payment Confirmed', {
+      journey: 'sender',
+      ...(assetType ? { asset_type: assetType } : {}),
+      ...(expiryDays != null ? { expiry_days: expiryDays } : {}),
+      ...(walletType ? { wallet_type: walletType } : {}),
+    }),
+  paymentCreated: ({
+    claimId,
+    assetType,
+    expiryDays,
+    confirmationTimeMs,
+  }: {
+    claimId: string;
+    assetType?: string;
+    expiryDays?: number | null;
+    confirmationTimeMs: number;
+  }) =>
+    track('Payment Created', {
+      journey: 'sender',
+      claim_id: claimId,
+      ...(assetType ? { asset_type: assetType } : {}),
+      ...(expiryDays != null ? { expiry_days: expiryDays } : {}),
+      confirmation_time_ms: confirmationTimeMs,
+    }),
+  claimLinkCopied: ({
+    claimId,
+    copyLocation,
+  }: {
+    claimId: string;
+    copyLocation: 'success_screen' | 'dashboard_detail';
+  }) =>
+    track('Claim Link Copied', {
+      journey: 'sender',
+      claim_id: claimId,
+      copy_location: copyLocation,
+    }),
+  claimLinkShared: ({ claimId, shareMethod }: { claimId: string; shareMethod: ShareMethod }) =>
+    track('Claim Link Shared', {
+      journey: 'sender',
+      claim_id: claimId,
+      share_method: shareMethod,
+    }),
+  claimPageOpened: ({
+    claimId,
+    entryChannel,
+  }: {
+    claimId: string;
+    entryChannel: ClaimEntryChannel;
+  }) =>
+    track('Claim Page Opened', {
+      journey: 'recipient',
+      claim_id: claimId,
+      entry_channel: entryChannel,
+    }),
+  paymentDetailsViewed: ({
+    claimId,
+    claimStatus,
+  }: {
+    claimId: string;
+    claimStatus: PaymentClaimStatus;
+  }) =>
+    track('Payment Details Viewed', {
+      journey: 'sender',
+      claim_id: claimId,
+      claim_status: claimStatus,
+    }),
+  pageViewed: ({ page, entrySource }: { page: string; entrySource?: EntrySource }) =>
+    track('Page Viewed', {
+      journey: 'sender',
+      page,
+      ...(entrySource ? { entry_source: entrySource } : {}),
+    }),
+  sendFormViewed: () => track('Send Form Viewed', { journey: 'sender' }),
   claimVerified: ({
     claimId,
     assetType,

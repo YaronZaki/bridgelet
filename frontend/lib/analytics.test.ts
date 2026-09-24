@@ -141,10 +141,10 @@ describe('track base payload merge', () => {
         app_version: expect.any(String),
         user_agent: expect.any(String),
         device_type: expect.stringMatching(/^(mobile|tablet|desktop)$/),
-        referrer: expect.toSatisfy((r: unknown) => typeof r === 'string' || r === null),
         reason: 'network_error',
       }),
     );
+    expect(typeof call[1].props.referrer === 'string' || call[1].props.referrer === null).toBe(true);
   });
 
   it('no-ops when the window object is unavailable', () => {
